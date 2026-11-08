@@ -83,7 +83,13 @@ export const OIDC = {
   tokenUrl: str('VITE_OIDC_TOKEN', 'https://api.autional.com/bff/oauth/api/v1/oauth/token'),
   clientId: str('VITE_OIDC_CLIENT_ID'),
   redirectUri: str('VITE_OIDC_REDIRECT_URI', `${origin()}/oauth/callback`),
-  scope: str('VITE_OIDC_SCOPE', 'openid profile email'),
+  /**
+   * 管理面读接口自 2026-11-06 起统一要求 `scope=read`（tenant/identity 等 protected 组
+   * 都挂了 `RequireScopes("read")`）。缺 read 会拿到 403 `token scope does not allow this operation`
+   * ——配置中心顶栏「切换门户」拉租户应用目录就是这么挂的。
+   * `offline_access` 用于续期，与密钥中心（secret）保持同一口径。
+   */
+  scope: str('VITE_OIDC_SCOPE', 'openid profile email offline_access read'),
 } as const;
 
 /** 当前地址是否 OIDC 回调页（`/oauth/callback`）。 */
