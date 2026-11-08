@@ -162,6 +162,16 @@ function userFromClaims(claims: Record<string, unknown> | null, fallbackName: st
   };
 }
 
+/** 从 access token 的 exp 派生过期时刻（权威）；缺失时才退回 expires_in。 */
+function expiresAtFromToken(accessToken: string, expiresIn?: number): number {
+  const claims = decodeJwtPayload(accessToken);
+  const exp = claims && typeof claims.exp === 'number' ? claims.exp : 0;
+  if (exp > 0) return exp * 1000;
+  const sec = Number(expiresIn);
+  if (Number.isFinite(sec) && sec > 0) return Date.now() + sec * 1000;
+  return Date.now() + 5 * 60_000;
+}
+
 function saveSession(session: Session): void {
   writeStorage(SESSION_KEY, JSON.stringify(session));
 }
@@ -356,7 +366,7 @@ export async function completeLogin(search: string = window.location.search): Pr
     accessToken: data.access_token as string,
     refreshToken: data.refresh_token,
     idToken: data.id_token,
-    expiresAt: Date.now() + Math.max(60, Number(data.expires_in) || 3600) * 1000,
+    expiresAt: expiresAtFromToken(data.access_token as string, data.expires_in),
     user: userFromClaims(claims, '已登录用户'),
   };
   saveSession(session);
@@ -406,7 +416,7 @@ async function doRefreshSession(stored?: Session | null): Promise<Session | null
       accessToken: data.access_token as string,
       refreshToken: data.refresh_token ?? base.refreshToken,
       idToken: data.id_token ?? base.idToken,
-      expiresAt: Date.now() + Math.max(60, Number(data.expires_in) || 3600) * 1000,
+      expiresAt: expiresAtFromToken(data.access_token as string, data.expires_in),
       user: userFromClaims(claims, base.user?.name || '已登录用户'),
     };
     // identity 补全过的展示名（platform_admin）不要被 token 里的 sub 尾段覆盖，
