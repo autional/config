@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Input, Popconfirm, Segmented, Select, Space, Switch, Tag } from 'antd';
 import { Plus } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -23,7 +23,14 @@ export default function DomainDetailPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { domain = '' } = useParams();
-  const { items, meta, reload, itemsStatus } = useConfigData();
+  const { items, meta, reload, itemsStatus, ensureDomain, domainStatus } = useConfigData();
+
+  // 首屏：先按域取（服务端 domain 过滤，~1s），不等 21 页全量。
+  useEffect(() => {
+    void ensureDomain(domain);
+  }, [domain, ensureDomain]);
+
+  const itemsReady = domainStatus(domain) === 'ready' || itemsStatus === 'ready';
   const { requestWrite, node: writeNode } = useWriteGate(reload);
 
   const [group, setGroup] = useState('');
@@ -149,7 +156,7 @@ export default function DomainDetailPage() {
           ) : null}
         </div>
 
-          {itemsStatus === 'error' || itemsStatus === 'forbidden' ? (
+          {domainStatus(domain) === 'error' || domainStatus(domain) === 'forbidden' || itemsStatus === 'error' || itemsStatus === 'forbidden' ? (
             <Alert
               className="mb-3"
               type="warning"
@@ -165,7 +172,7 @@ export default function DomainDetailPage() {
 
           <DataTable
             size="small"
-            loading={itemsStatus === 'loading'}
+            loading={!itemsReady}
             rowKey={(row: any) => (single ? itemId(row.s, row.k) : row.k)}
             dataSource={rows as any[]}
             pagination={{ pageSize: 50, showSizeChanger: false }}

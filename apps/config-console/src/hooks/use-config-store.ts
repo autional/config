@@ -62,5 +62,45 @@ export function useConfigStore(enabled: boolean) {
     await load(true);
   }, [load]);
 
-  return { items, meta, status, itemsStatus, error, load, reset, setItems, setMeta };
+  /**
+   * 按域快速取数：服务端支持 `?domain=`，482 条只要 5 页（~1s），
+   * 不用等 21 页的全量。结果并入 items，域/组页据此立即出表。
+   */
+  const domainCache = useRef(new Map<string, Item[]>());
+  const [domainState, setDomainState] = useState<Record<string, LoadStatus>>({});
+  const [domainRev, setDomainRev] = useState(0);
+
+  const ensureDomain = useCallback(async (domain: string) => {
+    if (!domain || domainCache.current.has(domain)) return;
+    setDomainState((prev) => ({ ...prev, [domain]: 'loading' }));
+    try {
+      const rows = await store.loadDomainItems(domain);
+      domainCache.current.set(domain, rows);
+      const seen = new Set<string>();
+      setItems((prev) => {
+        const merged: Item[] = [];
+        for (const item of prev) {
+          const key = `${item.s}|${item.k}`;
+          seen.add(key);
+          merged.push(item);
+        }
+        for (const item of rows) {
+          const key = `${item.s}|${item.k}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(item);
+          }
+        }
+        return merged;
+      });
+      setDomainState((prev) => ({ ...prev, [domain]: 'ready' }));
+      setDomainRev((v) => v + 1);
+    } catch (err) {
+      setDomainState((prev) => ({ ...prev, [domain]: errorStatus(err) === 403 ? 'forbidden' : 'error' }));
+    }
+  }, []);
+
+  const domainStatus = useCallback((domain: string): LoadStatus => domainState[domain] ?? 'idle', [domainState]);
+
+  return { items, meta, status, itemsStatus, error, load, reset, setItems, setMeta, ensureDomain, domainStatus, domainRev };
 }

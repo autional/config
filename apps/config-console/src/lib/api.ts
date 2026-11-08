@@ -270,10 +270,10 @@ export function listItems(query: ListItemsQuery = {}): Promise<ListItemsResult> 
  * 按 `id || service|key` 去重、结果顺序 = 页序 + 页内序、任一路径失败整体 reject。
  * （实测 2,025 条约 21 页：由「21 次串行」降为「1 + 20 并发」≈ 6 个来回。）
  */
-export async function listAllItems(pageSize = 100, maxPages = 200): Promise<ApiItem[]> {
+export async function listAllItems(pageSize = 100, maxPages = 200, filter: ListItemsQuery = {}): Promise<ApiItem[]> {
   if (maxPages <= 0) return [];
 
-  const first = await listItems({ page: 1, page_size: pageSize });
+  const first = await listItems({ ...filter, page: 1, page_size: pageSize });
   const pages: ListItemsResult[] = [first];
 
   const total = typeof first.total === 'number' && Number.isFinite(first.total) ? first.total : null;
@@ -288,13 +288,13 @@ export async function listAllItems(pageSize = 100, maxPages = 200): Promise<ApiI
   if (knownPages === null) {
     // 后端未回 total（理论不会发生）：退化为顺序翻页，保持原语义不变。
     for (let page = 2; page <= maxPages; page += 1) {
-      const res = await listItems({ page, page_size: pageSize });
+      const res = await listItems({ ...filter, page, page_size: pageSize });
       pages.push(res);
       if ((res.items ?? []).length < pageSize) break;
     }
   } else {
     const rest = Array.from({ length: knownPages - 1 }, (_, i) => i + 2);
-    pages.push(...(await poolMap(rest, LIST_CONCURRENCY, (page) => listItems({ page, page_size: pageSize }))));
+    pages.push(...(await poolMap(rest, LIST_CONCURRENCY, (page) => listItems({ ...filter, page, page_size: pageSize }))));
   }
 
   const out: ApiItem[] = [];

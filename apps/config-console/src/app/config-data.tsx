@@ -11,6 +11,11 @@ type ConfigData = {
   status: LoadStatus;
   /** 条目单独进度（meta 就绪后仍可能 loading）。 */
   itemsStatus: LoadStatus;
+  /** 按域快速取数（服务端 domain 过滤）；已取过的域直接复用。 */
+  ensureDomain: (domain: string) => Promise<void>;
+  domainStatus: (domain: string) => LoadStatus;
+  /** 按域取数完成的版本号（用于 memo 依赖）。 */
+  domainRev: number;
   error: string;
   reload: (silent?: boolean) => Promise<void>;
   reset: () => Promise<void>;
@@ -27,6 +32,9 @@ export function ConfigDataProvider({ enabled, children }: { enabled: boolean; ch
         meta: store.meta,
         status: store.status,
         itemsStatus: store.itemsStatus,
+        ensureDomain: store.ensureDomain,
+        domainStatus: store.domainStatus,
+        domainRev: store.domainRev,
         error: store.error,
         reload: store.load,
         reset: store.reset,
