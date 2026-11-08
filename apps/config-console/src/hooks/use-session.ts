@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AUTH_MODE, DATA_MODE, REQUIRE_AUTH, isCallbackPath } from '@/lib/config';
-import { completeLogin, restoreSession, signOut, startLogin } from '@/lib/auth';
+import { completeLogin, patchSessionUser, restoreSession, signOut, startLogin } from '@/lib/auth';
 import type { Session } from '@/lib/auth';
 import { UNAUTHORIZED_EVENT } from '@/lib/api';
 import { errorText } from '@/lib/data';
+import { resolveProfile } from '@/lib/profile';
 
 type BootResult = { session: Session | null; error: string };
 
@@ -54,6 +55,27 @@ export function useSession() {
       alive = false;
     };
   }, [navigate]);
+
+  // 展示名补全：token 里没有 name/email 时，用 identity 资料替换「…XXXXXX」。
+  useEffect(() => {
+    const user = session?.user;
+    if (!session || !user?.sub || !session.accessToken) return;
+    if (!user.name.startsWith('…')) return;
+    let alive = true;
+    void resolveProfile({
+      sub: user.sub,
+      token: session.accessToken,
+      tenantId: user.tenantId,
+      appId: user.appId,
+    }).then((patch) => {
+      if (!alive || !patch) return;
+      const next = patchSessionUser(patch);
+      if (next) setSession(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [session?.user.sub, session?.accessToken]);
 
   // 令牌失效（401）：清会话，回到登录态
   useEffect(() => {
