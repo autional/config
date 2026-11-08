@@ -42,6 +42,9 @@ export function useConfigStore(enabled: boolean) {
       const nextItems = await store.loadItems();
       if (run !== generation.current) return;
       setItems(nextItems);
+      // 服务名只能由条目推导：条目到位后回填 meta，避免侧栏/概览一直显示 0。
+      const services = Array.from(new Set(nextItems.filter((item) => item.s).map((item) => item.s))).sort();
+      setMeta((prev) => ({ ...prev, services }));
       setItemsStatus('ready');
     } catch (err) {
       if (run !== generation.current) return;
