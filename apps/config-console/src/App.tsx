@@ -6,6 +6,7 @@ import DomainDetailPage from './app/domain/page';
 import GroupEditorPage from './app/group/page';
 import ChangesPage from './app/changes/page';
 import ChangesetsPage from './app/changesets/page';
+import AuditPage from './app/audit/page';
 import NotFoundPage from './app/not-found/page';
 
 /**
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="domains/:domain/:group" element={<GroupEditorPage />} />
         <Route path="changes" element={<ChangesPage />} />
         <Route path="changesets" element={<ChangesetsPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

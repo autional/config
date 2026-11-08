@@ -10,7 +10,7 @@
  * 租户/应用一律取自登录令牌（后端会以 JWT 为准做一致性校验），`VITE_TENANT_ID` / `VITE_APP_ID` 只做兜底。
  */
 import { refreshSession, currentSession } from './auth';
-import { API_BASE, APP_ID, AUTH_MODE, TENANT_ID } from './config';
+import { API_BASE, APP_ID, AUDIT_BASE, AUTH_MODE, TENANT_ID } from './config';
 
 /** 管理面错误（统一携带 HTTP 状态与业务错误码，便于 UI 分流 401/403/503）。 */
 export class ApiError extends Error {
@@ -55,8 +55,8 @@ function scopeHeaders(): Record<string, string> {
   return headers;
 }
 
-function buildUrl(path: string, query?: Record<string, QueryValue>): string {
-  const url = new URL(`${API_BASE}${path}`, window.location.origin);
+function buildUrl(base: string, path: string, query?: Record<string, QueryValue>): string {
+  const url = new URL(`${base}${path}`, window.location.origin);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === '') continue;
@@ -85,7 +85,7 @@ function problemMessage(res: Response, problem: ProblemBody): string {
 
 /** 统一请求入口：带作用域头、可被 401 触发一次静默续期、错误归一为 ApiError。 */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const res = await send(path, options, 'application/json');
+  const res = await send(API_BASE, path, options, 'application/json');
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   if (!text) return undefined as T;
@@ -101,15 +101,66 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
  * 401 重试/错误归一口径与 request 完全一致。
  */
 export async function requestText(path: string, options: RequestOptions = {}): Promise<string> {
-  const res = await send(path, { timeoutMs: 60_000, ...options }, '*/*');
+  const res = await send(API_BASE, path, { timeoutMs: 60_000, ...options }, '*/*');
   return res.text();
+}
+
+/** 审计查询（独立 base；与 config 管理面相同的鉴权/401/错误归一）。 */
+export async function requestAudit<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const res = await send(AUDIT_BASE, path, options, 'application/json');
+  const text = await res.text();
+  if (!text) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(res.status, '审计响应不是合法 JSON');
+  }
+}
+
+export type AuditLogItem = {
+  id: string;
+  timestamp?: number;
+  tenant_id?: string;
+  operator_id?: string;
+  module?: string;
+  action?: string;
+  target_id?: string;
+  target_type?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type AuditListResult = {
+  items?: AuditLogItem[];
+  total?: number;
+  data?: { items?: AuditLogItem[]; total?: number };
+};
+
+/** 配置中心审计：平台基座默认 tenant_id=_system；传 tenantId 即走平台跨租户端点。 */
+export async function listAuditLogs(input: {
+  tenantId?: string;
+  action?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<AuditListResult> {
+  const tenant = input.tenantId?.trim();
+  const action = input.action && input.action !== 'all' ? input.action : undefined;
+  return requestAudit<AuditListResult>(tenant ? '/platform/logs' : '/logs', {
+    query: {
+      tenant_id: tenant || undefined,
+      module: 'config',
+      action,
+      page: input.page ?? 1,
+      page_size: input.pageSize ?? 20,
+    },
+  });
 }
 
 /**
  * 发请求并归一错误（401 可静默续期一次）。`request` / `requestText` 共用本函数，
  * 保证鉴权、超时、错误文案只有一套实现。
  */
-async function send(path: string, options: RequestOptions, accept: string): Promise<Response> {
+async function send(base: string, path: string, options: RequestOptions, accept: string): Promise<Response> {
   const { method = 'GET', query, body, retried = false, timeoutMs = 20_000 } = options;
   const headers: Record<string, string> = { Accept: accept, ...scopeHeaders() };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -118,7 +169,7 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(buildUrl(path, query), {
+    res = await fetch(buildUrl(base, path, query), {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -135,7 +186,7 @@ async function send(path: string, options: RequestOptions, accept: string): Prom
   if (res.status === 401) {
     if (!retried && AUTH_MODE === 'oidc') {
       const renewed = await refreshSession();
-      if (renewed) return send(path, { ...options, retried: true }, accept);
+      if (renewed) return send(base, path, { ...options, retried: true }, accept);
     }
     const problem = await parseProblem(res);
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));

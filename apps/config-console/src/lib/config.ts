@@ -33,6 +33,8 @@ export const AUTH_MODE: AuthMode = str('VITE_AUTH_MODE', 'mock').toLowerCase() =
  * 本地 dev 可在 vite 代理或 VITE_API_BASE 直接指向网关。
  */
 export const API_BASE = str('VITE_API_BASE', '/bff/config/api/v1/admin/config').replace(/\/+$/, '');
+/** 审计查询基址（与 config 管理面分离；默认同源 /bff）。 */
+export const AUDIT_BASE = str('VITE_AUDIT_BASE', '/bff/audit/api/v1/admin/audit').replace(/\/+$/, '');
 
 /** 租户/应用作用域：JWT 已带租户时以令牌为准（见 lib/api.ts），此处是兜底。 */
 export const TENANT_ID = str('VITE_TENANT_ID');

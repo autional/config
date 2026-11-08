@@ -52,6 +52,7 @@ function Shell({ session, onLogout }: {
       { key: '/domains', label: t('nav.domains') },
       { key: '/changes', label: t('nav.changes') },
       { key: '/changesets', label: t('nav.changesets') },
+      { key: '/audit', label: t('nav.audit') },
     ],
     [t],
   );
@@ -70,6 +71,7 @@ function Shell({ session, onLogout }: {
     }
     if (parts[0] === 'changes') return [{ label: t('nav.changes'), to: '/changes' }];
     if (parts[0] === 'changesets') return [{ label: t('nav.changesets'), to: '/changesets' }];
+    if (parts[0] === 'audit') return [{ label: t('nav.audit'), to: '/audit' }];
     return [];
   }, [location.pathname, t]);
   // 跨站入口交给顶栏的门户切换（PortalSwitcher），UserMenu 只保留退出登录，避免同一跳转出现两次
