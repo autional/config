@@ -8,6 +8,7 @@ import type { UserMenuItemSpec } from '@autional/ui';
 import { API_BASE, DATA_MODE, ENV_LABEL } from '@/lib/config';
 import { store } from '@/lib/data';
 import { useSession } from '@/hooks/use-session';
+import { useSessionActivity } from '@/hooks/use-session-activity';
 import { ConfigDataProvider, useConfigData } from './config-data';
 import { PortalMenu } from '@/components/portal-menu';
 import { LoginPage } from './login/page';
@@ -35,7 +36,9 @@ export default function Layout() {
   );
 }
 
-function Shell({ session, onLogout }: { session: ReturnType<typeof useSession>['session']; onLogout: () => Promise<void> }) {
+function Shell({ session, onLogout }: {
+  session: ReturnType<typeof useSession>['session']; onLogout: () => Promise<void> }) {
+  useSessionActivity(session);
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
