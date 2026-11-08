@@ -281,6 +281,17 @@ export async function startLogin(): Promise<Session | null> {
   return null;
 }
 
+/** 令牌端点错误：4xx = 确定失败（invalid_grant 等）；网络/5xx = 瞬时，不该登出。 */
+class TokenRequestError extends Error {
+  constructor(
+    message: string,
+    readonly fatal: boolean,
+  ) {
+    super(message);
+    this.name = 'TokenRequestError';
+  }
+}
+
 async function postToken(body: URLSearchParams): Promise<TokenResponse> {
   let res: Response;
   try {
@@ -290,12 +301,12 @@ async function postToken(body: URLSearchParams): Promise<TokenResponse> {
       body: body.toString(),
     });
   } catch (cause) {
-    throw new Error(`无法连接令牌端点（${OIDC.tokenUrl}）：${(cause as Error).message}`);
+    throw new TokenRequestError(`无法连接令牌端点（${OIDC.tokenUrl}）：${(cause as Error).message}`, false);
   }
   const data = (await res.json().catch(() => null)) as TokenResponse | null;
   if (!res.ok || !data?.access_token) {
     const reason = data?.error_description || data?.error || `HTTP ${res.status}`;
-    throw new Error(`换取令牌失败：${reason}`);
+    throw new TokenRequestError(`换取令牌失败：${reason}`, res.status >= 400 && res.status < 500);
   }
   return data;
 }
@@ -353,8 +364,19 @@ export async function completeLogin(search: string = window.location.search): Pr
 }
 
 /** 用 refresh_token 续期；失败返回 null 并清理会话。 */
-export async function refreshSession(stored?: Session | null): Promise<Session | null> {
-  if (AUTH_MODE === 'mock') return currentSession();
+let refreshInFlight: Promise<Session | null> | null = null;
+
+/** 用 refresh_token 续期；单飞（并发 401 / 定时刷新只发一次）。 */
+export function refreshSession(stored?: Session | null): Promise<Session | null> {
+  if (AUTH_MODE === 'mock') return Promise.resolve(currentSession());
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefreshSession(stored).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function doRefreshSession(stored?: Session | null): Promise<Session | null> {
   let base = stored ?? null;
   if (!base) {
     const raw = readStorage(SESSION_KEY);
@@ -387,12 +409,19 @@ export async function refreshSession(stored?: Session | null): Promise<Session |
       expiresAt: Date.now() + Math.max(60, Number(data.expires_in) || 3600) * 1000,
       user: userFromClaims(claims, base.user?.name || '已登录用户'),
     };
+    // identity 补全过的展示名（platform_admin）不要被 token 里的 sub 尾段覆盖，
+    // 否则每 5 分钟续期一次，顶栏就闪回「…XXXXXX」并重复查一次资料。
+    if (session.user.name.startsWith('…') && base.user?.name && !base.user.name.startsWith('…')) {
+      session.user = { ...session.user, name: base.user.name, email: session.user.email || base.user.email };
+    }
     // 令牌内没有租户/应用声明时，保留上一轮已知值，避免 X-Tenant-ID 丢失。
     if (!session.user.tenantId) session.user.tenantId = base.user?.tenantId ?? '';
     if (!session.user.appId) session.user.appId = base.user?.appId ?? '';
     saveSession(session);
     return session;
-  } catch {
+  } catch (err) {
+    // 网络/网关瞬时故障：保留会话，下一次定时器或请求再续；只有 4xx 才清会话。
+    if (err instanceof TokenRequestError && !err.fatal) return currentSession();
     clearSession();
     return null;
   }

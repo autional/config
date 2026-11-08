@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AUTH_MODE, DATA_MODE, REQUIRE_AUTH, isCallbackPath } from '@/lib/config';
-import { completeLogin, patchSessionUser, restoreSession, signOut, startLogin } from '@/lib/auth';
+import { completeLogin, patchSessionUser, refreshSession, restoreSession, signOut, startLogin } from '@/lib/auth';
 import type { Session } from '@/lib/auth';
 import { UNAUTHORIZED_EVENT } from '@/lib/api';
 import { errorText } from '@/lib/data';
@@ -55,6 +55,30 @@ export function useSession() {
       alive = false;
     };
   }, [navigate]);
+
+  // 主动续期：access token 只有 5 分钟，别等 401 再续（硬刷新时容易撞上，
+  // 多个并发请求同时 401 → 多次续期会互相作废）。剩余 < 2 分钟时静默续期。
+  useEffect(() => {
+    if (!session || AUTH_MODE !== 'oidc') return;
+    let alive = true;
+    const tick = async () => {
+      const expiresAt = session.expiresAt ?? 0;
+      if (expiresAt === 0 || expiresAt - Date.now() > 120_000) return;
+      const next = await refreshSession();
+      if (!alive || !next) return;
+      setSession((prev) => (prev && prev.accessToken === next.accessToken ? prev : next));
+    };
+    const timer = window.setInterval(() => void tick(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void tick();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [session]);
 
   // 展示名补全：token 里没有 name/email 时，用 identity 资料替换「…XXXXXX」。
   useEffect(() => {
