@@ -11,10 +11,11 @@ import { DATA_MODE } from '@/lib/config';
 import { errorText } from '@/lib/data';
 import { useConfigData } from '../config-data';
 import { scopeLabel } from '@/lib/model';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 
 /** 变更记录：跨服务的配置项历史（只读）。演示数据没有后端历史，故 mock 模式只给说明。 */
 export default function ChangesPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { meta } = useConfigData();
   const [service, setService] = useState('');
   const [domain, setDomain] = useState('');
@@ -107,7 +108,7 @@ export default function ChangesPage() {
               }}
               allowClear
               placeholder={t('changes.allDomains')}
-              options={meta.domains.map((item) => ({ value: item.name, label: item.name }))}
+              options={meta.domains.map((item) => ({ value: item.name, label: localizeDomainName(item.name, i18n.language) }))}
             />
             <Input.Search
               className="w-64"

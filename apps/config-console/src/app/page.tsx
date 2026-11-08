@@ -7,9 +7,10 @@ import { PageSection } from '@/components/page-section';
 import { store } from '@/lib/data';
 import { useConfigData } from './config-data';
 import { TransferActions } from '@/components/transfer-actions';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 
 export default function OverviewPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { message } = App.useApp();
   const { meta, reload, reset, itemsStatus } = useConfigData();
 
@@ -75,8 +76,8 @@ export default function OverviewPage() {
                     {domain.mono}
                   </span>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold text-[var(--color-text-primary)]">{domain.name}</div>
-                    <div className="truncate text-xs text-[var(--color-text-secondary)]">{domain.desc}</div>
+                    <div className="truncate font-semibold text-[var(--color-text-primary)]">{localizeDomainName(domain.name, i18n.language)}</div>
+                    <div className="truncate text-xs text-[var(--color-text-secondary)]">{localizeDomainDesc(domain.name, domain.desc, i18n.language)}</div>
                   </div>
                   <div className="ml-auto text-right">
                     <div className="text-lg font-bold">{domain.count}</div>
@@ -95,7 +96,7 @@ export default function OverviewPage() {
                 <div className="mt-2 flex flex-wrap gap-1">
                   {domain.groups.slice(0, 3).map((group) => (
                     <Tag key={group.name} className="!mr-0">
-                      {group.name} {group.count}
+                      {localizeGroupName(group.name, i18n.language)} {group.count}
                     </Tag>
                   ))}
                 </div>

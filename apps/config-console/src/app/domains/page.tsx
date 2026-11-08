@@ -2,11 +2,12 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { AppPageHeader } from '@autional/ui';
 import { PageSection } from '@/components/page-section';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 import { useConfigData } from '../config-data';
 
 /** 配置域索引：域只用于导航与统计，编辑入口在组。 */
 export default function DomainIndexPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { meta } = useConfigData();
 
   return (
@@ -27,8 +28,8 @@ export default function DomainIndexPage() {
                   {domain.mono}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="font-semibold text-[var(--color-text-primary)]">{domain.name}</div>
-                  <div className="truncate text-xs text-[var(--color-text-secondary)]">{domain.desc}</div>
+                  <div className="font-semibold text-[var(--color-text-primary)]">{localizeDomainName(domain.name, i18n.language)}</div>
+                  <div className="truncate text-xs text-[var(--color-text-secondary)]">{localizeDomainDesc(domain.name, domain.desc, i18n.language)}</div>
                 </div>
                 <div className="hidden gap-4 text-xs text-[var(--color-text-secondary)] sm:flex">
                   <span>{t('overview.itemsUnit')} {domain.count}</span>

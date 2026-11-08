@@ -12,6 +12,7 @@ import { groupEffective, servicesInGroup } from '@/lib/model';
 import type { Item } from '@/lib/model';
 import { store } from '@/lib/data';
 import { isMasked } from '@/lib/reveal';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 import { useConfigData } from '../config-data';
 import { useWriteGate } from '@/hooks/use-write-gate';
 import { ItemModal } from '@/components/item-modal';
@@ -71,7 +72,7 @@ export default function GroupEditorPage() {
   return (
     <>
       <AppPageHeader
-        title={group}
+        title={localizeGroupName(group, i18n.language)}
         description={localizeEditorText(editor?.note, i18n.language) || t('group.noEditorNote')}
         actions={
           <Space size={8} wrap>

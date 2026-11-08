@@ -16,11 +16,12 @@ import type { ItemModalState } from '@/components/item-modal';
 import { PlacementDrawer } from '@/components/placement-drawer';
 import { TransferActions } from '@/components/transfer-actions';
 import { isMasked } from '@/lib/reveal';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 
 const TYPE_TAG: Record<ItemType, string> = { int: 'blue', bool: 'green', yaml: 'orange', scalar: 'default' };
 
 export default function DomainDetailPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { message } = App.useApp();
   const { domain = '' } = useParams();
   const { items, meta, reload, itemsStatus, ensureDomain, domainStatus } = useConfigData();
@@ -80,8 +81,8 @@ export default function DomainDetailPage() {
   return (
     <>
       <AppPageHeader
-        title={domain}
-        description={detail?.desc || t('domains.detailFallback')}
+        title={localizeDomainName(domain, i18n.language)}
+        description={localizeDomainDesc(domain, detail?.desc, i18n.language) || t('domains.detailFallback')}
         actions={
           <Space size={8} wrap>
             <Link to="/domains" className="text-sm text-[var(--color-primary-600)]">
@@ -110,7 +111,7 @@ export default function DomainDetailPage() {
             type={group === entry.name ? 'primary' : 'default'}
             onClick={() => setGroup(entry.name)}
           >
-            {entry.name}
+            {localizeGroupName(entry.name, i18n.language)}
             <span className="ml-1 opacity-70">{entry.count}</span>
           </Button>
         ))}
@@ -181,7 +182,7 @@ export default function DomainDetailPage() {
               single
                 ? [
                     { title: t('domains.col.key'), dataIndex: 'k', width: '32%', render: (v: string) => <code className="font-mono text-xs">{v}</code> },
-                    { title: t('domains.col.group'), dataIndex: 'g', width: 140 },
+                    { title: t('domains.col.group'), dataIndex: 'g', width: 140, render: (v: string) => localizeGroupName(v, i18n.language) },
                     { title: t('domains.col.value'), dataIndex: 'v', ellipsis: true, render: (v: string, row: Item) => <span className="font-mono text-xs">{isMasked({ value: v, masked: row.masked }) ? t('common.masked') : v}</span> },
                     { title: t('domains.col.type'), dataIndex: 't', width: 80, render: (v: ItemType) => <Tag color={TYPE_TAG[v]}>{v}</Tag> },
                     {
@@ -216,7 +217,7 @@ export default function DomainDetailPage() {
                         </button>
                       ),
                     },
-                    { title: t('domains.col.group'), dataIndex: 'g', width: 130 },
+                    { title: t('domains.col.group'), dataIndex: 'g', width: 130, render: (v: string) => localizeGroupName(v, i18n.language) },
                     {
                       title: t('domains.col.value'),
                       dataIndex: 'v',

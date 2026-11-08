@@ -11,6 +11,7 @@ import { useSession } from '@/hooks/use-session';
 import { useSessionActivity } from '@/hooks/use-session-activity';
 import { ConfigDataProvider, useConfigData } from './config-data';
 import { PortalMenu } from '@/components/portal-menu';
+import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 import { LoginPage } from './login/page';
 
 export default function Layout() {
@@ -39,7 +40,7 @@ export default function Layout() {
 function Shell({ session, onLogout }: {
   session: ReturnType<typeof useSession>['session']; onLogout: () => Promise<void> }) {
   useSessionActivity(session);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { status, error, reload, meta, itemsStatus } = useConfigData();
@@ -65,8 +66,8 @@ function Shell({ session, onLogout }: {
     if (parts.length === 0) return [];
     if (parts[0] === 'domains') {
       const list = [{ label: t('nav.domains'), to: '/domains' }];
-      if (parts[1]) list.push({ label: parts[1], to: `/domains/${encodeURIComponent(parts[1])}` });
-      if (parts[2]) list.push({ label: parts[2], to: location.pathname });
+      if (parts[1]) list.push({ label: localizeDomainName(parts[1], i18n.language), to: `/domains/${encodeURIComponent(parts[1])}` });
+      if (parts[2]) list.push({ label: localizeGroupName(parts[2], i18n.language), to: location.pathname });
       return list;
     }
     if (parts[0] === 'changes') return [{ label: t('nav.changes'), to: '/changes' }];
