@@ -309,3 +309,18 @@ https://cn-secret-git-feat-ui-rewrite-jd7438716-gmailcoms-projects.vercel.app
   用 `mt-auto` 贴在侧栏底部，填补大片留白。
 - 密钥列表的**行内操作收进 `⋯` 下拉**（查看/轮换/改描述/吊销/删除），
   更新时间不再折行；实测表格 1088px 内完整显示、无内部滚动。
+
+### 生产系统测试修复（2026-11-08）
+
+按线上实测（MCP 浏览器，只读）修了三处，均已部署：
+
+- **门户切换只剩 1 项**：`GET /tenants/{id}/applications` 返回 403
+  `token scope does not allow this operation`（config 的 OAuth 客户端缺 tenant-service
+  的 admin 读取权限）。降级时改用 `fallbackPortals()` 按 code 派生 9 个已知门户，
+  域名仍由 `buildPortalUrl` 生成；后端补权限后自动回到目录数据。
+- **首屏 6.8s**：2025 条 / `page_size` 上限 100 → 21 页。拆成两阶段：
+  `loadMeta()` 只打 `/groups`（外壳/概览/导航立即可用），`loadItems()` 后台补全量；
+  实测首屏 3.0s→域名页 0.9s 出表头（表格自带 loading），2.7s 出行。
+  新增 `itemsStatus`：条目未就绪时域页显示表格 loading、服务数显示「—」，
+  条目失败给 Alert + 重试，不静默。
+- 全量拉取并发 4→8（单页 ~1s，服务端上限 100，收益有限，主要靠两阶段）。

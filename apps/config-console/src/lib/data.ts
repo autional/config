@@ -228,12 +228,8 @@ const apiStore: Store = {
 
   async loadMeta() {
     // 只打 /groups：1 次请求就能撑起外壳、概览统计与域/组导航。
-    // 失败时给空 meta，后续条目加载仍可让页面工作（域详情自己有 loading）。
-    try {
-      return metaFromGroups(await api.groups(), []);
-    } catch {
-      return EMPTY_META;
-    }
+    // 失败如实抛出（外壳显示错误 + 重试），不要吞成空 meta 让人以为「没有配置」。
+    return metaFromGroups(await api.groups(), []);
   },
 
   async loadItems() {
