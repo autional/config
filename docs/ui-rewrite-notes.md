@@ -324,3 +324,16 @@ https://cn-secret-git-feat-ui-rewrite-jd7438716-gmailcoms-projects.vercel.app
   新增 `itemsStatus`：条目未就绪时域页显示表格 loading、服务数显示「—」，
   条目失败给 Alert + 重试，不静默。
 - 全量拉取并发 4→8（单页 ~1s，服务端上限 100，收益有限，主要靠两阶段）。
+
+### 追加修复（2026-11-08 晚）
+
+- **顶栏身份**：token 里没有 name/email，展示名只剩 sub 尾段（`…MDSVNC`）。
+  登录后按 sub 查一次 identity 用户资料补成 `platform_admin`；续期重建 user 时保留该名字。
+  独立 fetch，不走共享 request()，避免 identity 401 触发误登出。
+- **硬刷新撞上 token 过期会卡十几秒甚至掉登录**：config 原来没有主动续期，
+  多个并发请求同时 401 → 各自续期 → 轮换的 refresh_token 互相作废。
+  现在：续期单飞；剩余 < 2 分钟主动续期（页面重新可见也查一次）；
+  只有 4xx 才清会话，网络/5xx 视为瞬时并保留会话。
+- **域名页按域取数**：服务端 `/items` 支持 `domain`（482 条 / 5 页），
+  进域页先按域取并并入 items，不再干等 21 页全量。
+  实测：表头 1.2s、数据 3.4s（原 5.9s）。
