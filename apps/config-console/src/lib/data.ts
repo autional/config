@@ -68,6 +68,8 @@ function metaFromGroups(view: api.GroupsResult, items: Item[]): Meta {
     }));
     return { name: d.domain, count: d.count, base: d.base, svc: d.svc, groups, ...meta };
   });
+  // 服务清单只能由条目推导（/groups 只给数量不给名称）；
+  // 条目是后台补的，因此首屏这一项显示「—」而不是 0。
   const services = Array.from(new Set(items.filter((it) => it.s).map((it) => it.s))).sort();
   return {
     domains,
@@ -104,7 +106,10 @@ export type Store = {
   remoteEffective: boolean;
   /** 是否用 `/editors` 取组编辑器 schema（api 模式）。 */
   remoteEditor: boolean;
-  load(): Promise<{ items: Item[]; meta: Meta }>;
+  /** 只取域/组聚合（`/groups`，1 次请求）：首屏外壳、概览、导航都用它。 */
+  loadMeta(): Promise<Meta>;
+  /** 全量条目（服务端 page_size 上限 100，需分页并发）：域详情/组详情才用。 */
+  loadItems(): Promise<Item[]>;
   upsert(item: Item, reason: string): Promise<void>;
   remove(item: Item, reason: string): Promise<void>;
   rollback(item: Item, revision: number, reason: string): Promise<void>;
@@ -138,9 +143,12 @@ const mockStore: Store = {
   remoteEffective: false,
   remoteEditor: false,
 
-  async load() {
-    const items = applyOverrides(loadOverrides());
-    return { items, meta: buildMeta(items) };
+  async loadMeta() {
+    return buildMeta(applyOverrides(loadOverrides()));
+  },
+
+  async loadItems() {
+    return applyOverrides(loadOverrides());
   },
 
   async upsert(item: Item) {
@@ -218,19 +226,21 @@ const apiStore: Store = {
   remoteEffective: true,
   remoteEditor: true,
 
-  async load() {
+  async loadMeta() {
+    // 只打 /groups：1 次请求就能撑起外壳、概览统计与域/组导航。
+    // 失败时给空 meta，后续条目加载仍可让页面工作（域详情自己有 loading）。
+    try {
+      return metaFromGroups(await api.groups(), []);
+    } catch {
+      return EMPTY_META;
+    }
+  },
+
+  async loadItems() {
     const rows = await api.listAllItems();
     originalValueType.clear();
     for (const row of rows) originalValueType.set(rowId(row.service_name, row.key), row.value_type);
-    const items = rows.map(toItem);
-    // 域/组统计以服务端聚合为准；`/groups` 失败不阻断列表（退回本地聚合）。
-    let view: api.GroupsResult | null = null;
-    try {
-      view = await api.groups();
-    } catch {
-      view = null;
-    }
-    return { items, meta: view ? metaFromGroups(view, items) : buildMeta(items) };
+    return rows.map(toItem);
   },
 
   async upsert(item: Item, reason: string) {

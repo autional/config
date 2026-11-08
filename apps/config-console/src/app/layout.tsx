@@ -39,7 +39,7 @@ function Shell({ session, onLogout }: { session: ReturnType<typeof useSession>['
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { status, error, reload, meta } = useConfigData();
+  const { status, error, reload, meta, itemsStatus } = useConfigData();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -102,7 +102,7 @@ function Shell({ session, onLogout }: { session: ReturnType<typeof useSession>['
                 <span>{t('sidebar.groups')}</span>
                 <b>{meta.domains.reduce((n, domain) => n + domain.groups.length, 0)}</b>
               </div>
-              <div className="flex justify-between py-0.5"><span>{t('sidebar.services')}</span><b>{meta.services.length}</b></div>
+              <div className="flex justify-between py-0.5"><span>{t('sidebar.services')}</span><b>{itemsStatus === 'ready' ? meta.services.length : '—'}</b></div>
             </div>
           )}
         </>

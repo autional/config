@@ -20,7 +20,7 @@ import type { ItemModalState } from '@/components/item-modal';
 export default function GroupEditorPage() {
   const { t, i18n } = useTranslation();
   const { domain = '', group = '' } = useParams();
-  const { items, reload } = useConfigData();
+  const { items, reload, itemsStatus } = useConfigData();
   const { requestWrite, node: writeNode } = useWriteGate(reload);
   const [scope, setScope] = useState('');
   const [modal, setModal] = useState<ItemModalState | null>(null);
@@ -156,7 +156,11 @@ export default function GroupEditorPage() {
       ) : null}
 
       <PageSection title={t('group.otherItems', { count: others.length })}>
-        {others.length === 0 ? (
+        {others.length === 0 && itemsStatus === 'loading' ? (
+          <div className="py-10 text-center">
+            <Spin />
+          </div>
+        ) : others.length === 0 ? (
           <Empty description={t('group.otherEmpty')} />
         ) : (
           <DataTable

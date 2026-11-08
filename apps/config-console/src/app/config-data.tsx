@@ -9,6 +9,8 @@ type ConfigData = {
   items: Item[];
   meta: Meta;
   status: LoadStatus;
+  /** 条目单独进度（meta 就绪后仍可能 loading）。 */
+  itemsStatus: LoadStatus;
   error: string;
   reload: (silent?: boolean) => Promise<void>;
   reset: () => Promise<void>;
@@ -24,6 +26,7 @@ export function ConfigDataProvider({ enabled, children }: { enabled: boolean; ch
         items: store.items,
         meta: store.meta,
         status: store.status,
+        itemsStatus: store.itemsStatus,
         error: store.error,
         reload: store.load,
         reset: store.reset,

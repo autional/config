@@ -11,14 +11,15 @@ import { TransferActions } from '@/components/transfer-actions';
 export default function OverviewPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const { meta, reload, reset } = useConfigData();
+  const { meta, reload, reset, itemsStatus } = useConfigData();
 
   const groups = meta.domains.reduce((n, domain) => n + domain.groups.length, 0);
-  const stats = [
+  const stats: { key: string; label: string; hint: string; value: string | number }[] = [
     { key: 'items', label: t('overview.stat.items'), hint: t('overview.stat.itemsHint'), value: meta.total },
     { key: 'base', label: t('overview.stat.base'), hint: t('overview.stat.baseHint'), value: meta.base },
     { key: 'svc', label: t('overview.stat.svc'), hint: t('overview.stat.svcHint'), value: meta.svc },
-    { key: 'services', label: t('overview.stat.services'), hint: t('overview.stat.servicesHint'), value: meta.services.length },
+    // 服务名只能从条目推导；条目在后台补，未就绪前给「—」而不是错的 0。
+    { key: 'services', label: t('overview.stat.services'), hint: t('overview.stat.servicesHint'), value: itemsStatus === 'ready' ? meta.services.length : '—' },
     { key: 'domains', label: t('overview.stat.domains'), hint: t('overview.stat.domainsHint'), value: meta.domains.length },
     { key: 'groups', label: t('overview.stat.groups'), hint: t('overview.stat.groupsHint'), value: groups },
   ];

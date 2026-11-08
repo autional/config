@@ -23,7 +23,7 @@ export default function DomainDetailPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const { domain = '' } = useParams();
-  const { items, meta, reload } = useConfigData();
+  const { items, meta, reload, itemsStatus } = useConfigData();
   const { requestWrite, node: writeNode } = useWriteGate(reload);
 
   const [group, setGroup] = useState('');
@@ -149,8 +149,23 @@ export default function DomainDetailPage() {
           ) : null}
         </div>
 
+          {itemsStatus === 'error' || itemsStatus === 'forbidden' ? (
+            <Alert
+              className="mb-3"
+              type="warning"
+              showIcon
+              message={t('console.errorTitle')}
+              action={
+                <Button size="small" onClick={() => void reload()}>
+                  {t('common.retry')}
+                </Button>
+              }
+            />
+          ) : null}
+
           <DataTable
             size="small"
+            loading={itemsStatus === 'loading'}
             rowKey={(row: any) => (single ? itemId(row.s, row.k) : row.k)}
             dataSource={rows as any[]}
             pagination={{ pageSize: 50, showSizeChanger: false }}
