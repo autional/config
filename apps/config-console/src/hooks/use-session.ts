@@ -65,7 +65,13 @@ export function useSession() {
       const expiresAt = session.expiresAt ?? 0;
       if (expiresAt === 0 || expiresAt - Date.now() > 120_000) return;
       const next = await refreshSession();
-      if (!alive || !next) return;
+      if (!alive) return;
+      if (!next) {
+        // 会话已失效（闲置过期/吊销）：必须切回登录态，否则 UI 还停在控制台，
+        // 用户点任何东西才被弹回登录页（体感像"卡住"）。
+        setSession(null);
+        return;
+      }
       setSession((prev) => (prev && prev.accessToken === next.accessToken ? prev : next));
     };
     const timer = window.setInterval(() => void tick(), 60_000);
