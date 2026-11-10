@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Alert, App, Button, Empty, Popconfirm, Select, Space, Spin, Tag } from 'antd';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { PageSection } from '@/components/page-section';
 import { DataTable } from '@autional/ui/antd';
 import { editorOf, coveredKeys } from '@/lib/editors';
@@ -71,7 +71,7 @@ export default function GroupEditorPage() {
 
   return (
     <>
-      <AppPageHeader
+      <PageHeader
         title={localizeGroupName(group, i18n.language)}
         description={localizeEditorText(editor?.note, i18n.language) || t('group.noEditorNote')}
         actions={

@@ -9,3 +9,7 @@ dist/
 .env.*
 !.env.example
 .vercel
+
+# Playwright
+apps/config-console/test-results/
+apps/config-console/playwright-report/

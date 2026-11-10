@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { PageSection } from '@/components/page-section';
 import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 import { useConfigData } from '../config-data';
@@ -12,7 +12,7 @@ export default function DomainIndexPage() {
 
   return (
     <>
-      <AppPageHeader title={t('domains.title')} description={t('domains.description')} />
+      <PageHeader title={t('domains.title')} description={t('domains.description')} />
       <PageSection >
         <ul className="divide-y divide-[var(--color-border-subtle)]">
           {meta.domains.map((domain) => (

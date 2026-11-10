@@ -1,8 +1,8 @@
-import { App, Button, Card, Popconfirm, Space, Statistic, Tag } from 'antd';
+import { App, Button, Card, Popconfirm, Space, Statistic, Tag, Tooltip } from 'antd';
 import { RotateCcw } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { PageSection } from '@/components/page-section';
 import { store } from '@/lib/data';
 import { useConfigData } from './config-data';
@@ -27,7 +27,7 @@ export default function OverviewPage() {
 
   return (
     <>
-      <AppPageHeader
+      <PageHeader
         title={t('overview.title')}
         description={t('overview.description')}
         actions={
@@ -42,7 +42,9 @@ export default function OverviewPage() {
                   message.success(t('overview.resetDone'));
                 }}
               >
-                <Button icon={<RotateCcw size={14} />}>{t('overview.reset')}</Button>
+                <Tooltip title={t('overview.reset')}>
+                  <Button icon={<RotateCcw size={14} />} aria-label={t('overview.reset')} />
+                </Tooltip>
               </Popconfirm>
             ) : null}
           </Space>

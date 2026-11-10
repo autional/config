@@ -37,6 +37,7 @@
   "common.view": "View",
   "common.retry": "Retry",
   "common.rollback": "Roll back",
+  "common.export": "Export",
   "console.errorTitle": "Failed to load",
   "console.forbiddenTitle": "No access to the Config Console",
   "console.forbiddenHint": "This account is missing the config:read permission.",

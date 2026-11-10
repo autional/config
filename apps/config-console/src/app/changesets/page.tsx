@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, App, Button, Segmented, Space, Tag } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { PageSection } from '@/components/page-section';
 import { Drawer, DataTable } from '@autional/ui/antd';
 import { CHANGESETS_PAGE_SIZE, buildChangesetQuery, canPublish, canReject, statusColor, statusLabel } from '@/lib/changesets';
@@ -81,7 +81,7 @@ export default function ChangesetsPage() {
 
   return (
     <>
-      <AppPageHeader title={t('changesets.title')} description={t('changesets.description')} />
+      <PageHeader title={t('changesets.title')} description={t('changesets.description')} />
       {DATA_MODE !== 'api' ? (
         <Alert className="mb-4" type="info" showIcon title={t('changesets.demoHint')} />
       ) : (

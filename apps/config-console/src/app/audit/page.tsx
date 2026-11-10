@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Button, Input, Select } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { DataTable } from '@autional/ui/antd';
 import { PageSection } from '@/components/page-section';
 import { DATA_MODE } from '@/lib/config';
@@ -62,7 +62,7 @@ export default function AuditPage() {
 
   return (
     <>
-      <AppPageHeader title={t('audit.title')} description={t('audit.description')} />
+      <PageHeader title={t('audit.title')} description={t('audit.description')} />
 
       {DATA_MODE !== 'api' ? (
         <Alert type="info" showIcon className="mb-3" title={t('audit.mock')} />
@@ -77,7 +77,7 @@ export default function AuditPage() {
               setTenantId(event.target.value);
               setPage(1);
             }}
-            addonBefore={t('audit.tenant')}
+            prefix={<span className="pr-2 text-[var(--color-text-secondary)]">{t('audit.tenant')}</span>}
             placeholder="_system"
             className="max-w-[360px]"
           />

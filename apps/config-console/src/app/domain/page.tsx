@@ -3,7 +3,7 @@ import { Alert, App, Button, Input, Popconfirm, Segmented, Select, Space, Switch
 import { Plus } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { AppPageHeader } from '@autional/ui';
+import { PageHeader } from '@/components/page-header';
 import { PageSection } from '@/components/page-section';
 import { DataTable } from '@autional/ui/antd';
 import { aggregate, isRule, itemId } from '@/lib/model';
@@ -80,7 +80,7 @@ export default function DomainDetailPage() {
 
   return (
     <>
-      <AppPageHeader
+      <PageHeader
         title={localizeDomainName(domain, i18n.language)}
         description={localizeDomainDesc(domain, detail?.desc, i18n.language) || t('domains.detailFallback')}
         actions={

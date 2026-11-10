@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { AppShell, LanguageSwitcher, ThemeToggle, UserMenu } from '@autional/ui';
 import type { UserMenuItemSpec } from '@autional/ui';
 import { API_BASE, DATA_MODE, ENV_LABEL } from '@/lib/config';
+import { SECRET_CENTER_URL } from '@/lib/links';
 import { store } from '@/lib/data';
 import { useSession } from '@/hooks/use-session';
 import { useSessionActivity } from '@/hooks/use-session-activity';
@@ -54,6 +55,7 @@ function Shell({ session, onLogout }: {
       { key: '/changes', label: t('nav.changes') },
       { key: '/changesets', label: t('nav.changesets') },
       { key: '/audit', label: t('nav.audit') },
+      { key: 'secret-center', label: t('nav.secretCenter') },
     ],
     [t],
   );
@@ -95,6 +97,12 @@ function Shell({ session, onLogout }: {
             items={navItems}
             className="border-r-0"
             onClick={({ key }) => {
+              // 跨站入口：新标签打开密钥中心，不参与本应用路由
+              if (key === 'secret-center') {
+                window.open(SECRET_CENTER_URL, '_blank', 'noopener,noreferrer');
+                setMobileOpen(false);
+                return;
+              }
               navigate(key);
               setMobileOpen(false);
             }}
