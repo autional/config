@@ -12,6 +12,7 @@ import { groupEffective, servicesInGroup } from '@/lib/model';
 import type { Item } from '@/lib/model';
 import { store } from '@/lib/data';
 import { isMasked } from '@/lib/reveal';
+import { secretCenterUrl } from '@/lib/links';
 import { localizeDomainDesc, localizeDomainName, localizeGroupName } from '@/lib/taxonomy-i18n';
 import { useConfigData } from '../config-data';
 import { useWriteGate } from '@/hooks/use-write-gate';
@@ -114,7 +115,18 @@ export default function GroupEditorPage() {
                   <div className="min-w-0">
                     {secretKeys ? (
                       <div className="space-y-1">
+                        <div className="text-xs text-[var(--color-text-secondary)]">{t('group.secretConfigKeys')}</div>
                         <code className="text-xs">{secretKeys}</code>
+                        {hit?.v && !isMasked({ value: hit.v, masked: hit.masked }) ? (
+                          <a
+                            href={secretCenterUrl(hit.v)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block break-all text-xs text-[var(--color-primary)] hover:underline"
+                          >
+                            {t('group.openSecret', { key: hit.v })} ↗
+                          </a>
+                        ) : null}
                         <div className="text-xs text-[var(--color-text-secondary)]">{t('group.secretRefHint')}</div>
                       </div>
                     ) : (

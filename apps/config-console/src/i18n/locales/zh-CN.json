@@ -227,5 +227,7 @@
   "portal.name.user": "用户中心",
   "portal.name.status": "状态页",
   "portal.name.trust": "信任中心",
-  "portal.name.developer": "开发者门户"
+  "portal.name.developer": "开发者门户",
+  "group.secretConfigKeys": "配置键（值指向密钥中心）",
+  "group.openSecret": "在密钥中心查看 {{key}}"
 }

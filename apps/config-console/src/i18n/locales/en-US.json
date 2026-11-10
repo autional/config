@@ -227,5 +227,7 @@
   "portal.name.user": "User Center",
   "portal.name.status": "Status Page",
   "portal.name.trust": "Trust Center",
-  "portal.name.developer": "Developer Portal"
+  "portal.name.developer": "Developer Portal",
+  "group.secretConfigKeys": "Config keys (values point to Secret Center)",
+  "group.openSecret": "View {{key}} in Secret Center"
 }
