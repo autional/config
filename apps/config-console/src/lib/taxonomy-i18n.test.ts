@@ -26,6 +26,11 @@ describe('taxonomy i18n 覆盖率', () => {
     expect(missing).toEqual([]);
   });
 
+  it('包含后端兜底域「其他」的英译', () => {
+    // service-config/grouping.DefaultDomain = 「其他」：生产上未命中的键会形成第 14 个域。
+    expect(localizeDomainName('其他', 'en-US')).toBe('Other');
+  });
+
   it('英文名不含中文', () => {
     const bad = [
       ...Object.entries(DOMAIN_I18N).filter(([, v]) => CJK.test(v.name) || CJK.test(v.desc)),

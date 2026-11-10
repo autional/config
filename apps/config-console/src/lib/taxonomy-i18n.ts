@@ -20,6 +20,8 @@ export const DOMAIN_I18N: Record<string, { name: string; desc: string }> = {
   治理与合规: { name: 'Governance & Compliance', desc: 'Compliance, privacy, audit retention, platform' },
   校验规则: { name: 'Validation Rules', desc: 'Validation rules embedded in configuration (metadata)' },
   日志与观测: { name: 'Logs & Observability', desc: 'Log level/format, metrics and search' },
+  // 后端 grouping.DefaultDomain：taxonomy 未命中的键落到「其他」
+  其他: { name: 'Other', desc: 'Keys without a taxonomy match' },
 };
 
 export const GROUP_I18N: Record<string, string> = {
