@@ -1,5 +1,10 @@
 # 配置中心控制台（Config Console）
 
+> 🚨 **2026-11-10 托管变更**：`*.autional.cn` **已迁出 Vercel** —— 改为 mf01 构建（node:24-alpine + 钉版 pnpm）→ 香港自建托管。
+> `.cn` 的构建 env 由 workspace `shared/infra-ops/sites/sites.manifest.json` 注入；push 后由 mf01 cron（约 10 分钟）构建发布，不经 Vercel。
+> `*.autional.com` 仍在 Vercel —— 本文中涉及 Vercel 的构建/部署描述对 `.com` 仍然成立。
+> 现行口径：workspace `docs/AUTIONAL-CN-SITES-SELF-HOST.md`。
+
 **仓库**：<https://github.com/autional/config>
 **域名**：[config.autional.com](https://config.autional.com) · [config.autional.cn](https://config.autional.cn)
 **Vercel 双项目**：`config`（com，`API_ORIGIN=https://api.autional.com`）· `cn-config`（cn，`API_ORIGIN=https://api.autional.cn`），配置见 `vercel.ts`。
@@ -48,7 +53,7 @@ config/
 
 ## 部署
 
-`main` 推送 → Vercel 自动部署（项目 `config`）。
+`main` 推送 → `.com` 由 Vercel 自动部署（项目 `config`）；`.cn` 由 mf01 cron 构建发布。
 生产地址：<https://config.autional.com> · <https://config.autional.cn>
 
 ## 运行
@@ -151,7 +156,7 @@ VITE_OIDC_TOKEN=/bff/oauth/api/v1/oauth/token
 
 ### 2026-11-06 上线实况与排障
 
-- Vercel `config`(com) / `cn-config`(cn) 已设 `VITE_DATA_MODE=api`、`VITE_AUTH_MODE=oidc`、
+- `.com` 项目 `config` 已设（Vercel）；`.cn` 侧 2026-11-10 起改由 manifest 注入（原 `cn-config` 项目已停用自动部署）： `VITE_DATA_MODE=api`、`VITE_AUTH_MODE=oidc`、
   `VITE_REQUIRE_AUTH=1`、平台客户端 `01AR...008`、`VITE_TENANT_ID=01KSQCBNVMS6SX64PJS937CE33`；
   令牌端点走同源 `/bff/oauth/api/v1/oauth/token`。
 - 登录拿到的是 **RS256** access token，`entry_plane=admin`；`iss/aud` 是
