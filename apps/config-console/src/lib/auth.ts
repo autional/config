@@ -14,6 +14,7 @@
  */
 import { decodeJwtPayload as decodeJwtPayloadShared } from '@autional/shared/jwt';
 import { generatePKCE } from '@autional/shared/pkce';
+import { expiresAtFromToken, pickClaimString, userFromClaims } from '@autional/shared/console-auth';
 import { APP_ID, AUTH_MODE, OIDC, TENANT_ID } from './config';
 
 export type SessionUser = {
@@ -110,52 +111,6 @@ function randomToken(byteLength = 32): string {
  */
 function decodeJwtPayload(token?: string): Record<string, unknown> | null {
   return token ? decodeJwtPayloadShared(token) : null;
-}
-
-function pickString(source: Record<string, unknown> | null, ...keys: string[]): string {
-  if (!source) return '';
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === 'string' && value.trim() !== '') return value.trim();
-  }
-  return '';
-}
-
-function pickRoles(source: Record<string, unknown> | null): string[] {
-  if (!source) return [];
-  for (const key of ['roles', 'role', 'authorities']) {
-    const value = source[key];
-    if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
-    if (typeof value === 'string' && value !== '') return value.split(/[,\s]+/).filter(Boolean);
-  }
-  return [];
-}
-
-function userFromClaims(claims: Record<string, unknown> | null, fallbackName: string): SessionUser {
-  const sub = pickString(claims, 'sub', 'user_id', 'userId');
-  // 展示名：name → preferred_username → nickname → email → sub 尾段。
-  // 之前缺省是「已登录用户」，顶栏出现「已 已登录用户」这种既重复又不提供身份的文案。
-  const name =
-    pickString(claims, 'name', 'preferred_username', 'nickname', 'email') ||
-    (sub ? `…${sub.slice(-6)}` : fallbackName);
-  return {
-    sub,
-    name,
-    email: pickString(claims, 'email'),
-    tenantId: pickString(claims, 'tenant_id', 'tenantId', 'tenant'),
-    appId: pickString(claims, 'app_id', 'appId', 'application_id'),
-    roles: pickRoles(claims),
-  };
-}
-
-/** 从 access token 的 exp 派生过期时刻（权威）；缺失时才退回 expires_in。 */
-function expiresAtFromToken(accessToken: string, expiresIn?: number): number {
-  const claims = decodeJwtPayload(accessToken);
-  const exp = claims && typeof claims.exp === 'number' ? claims.exp : 0;
-  if (exp > 0) return exp * 1000;
-  const sec = Number(expiresIn);
-  if (Number.isFinite(sec) && sec > 0) return Date.now() + sec * 1000;
-  return Date.now() + 5 * 60_000;
 }
 
 function saveSession(session: Session): void {
@@ -340,7 +295,7 @@ export async function completeLogin(search: string = window.location.search): Pr
   );
 
   const claims = decodeJwtPayload(data.id_token) ?? decodeJwtPayload(data.access_token);
-  const nonceClaim = pickString(claims, 'nonce');
+  const nonceClaim = pickClaimString(claims, 'nonce');
   if (nonceClaim && nonceClaim !== pkce.nonce) {
     removeStorage(PKCE_KEY);
     throw new Error('nonce 校验失败（令牌可能被重放），请重新登录');
