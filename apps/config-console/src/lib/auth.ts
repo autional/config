@@ -1,156 +1,46 @@
 /**
  * 登录会话：OIDC 授权码 + PKCE（S256，state + nonce）。
  *
- * 约定（与 platform SDK / 门户一致）：
- *   - 公开客户端（is_confidential=false），不存 client_secret；
- *   - token 存 sessionStorage（关闭标签页即失效；不写 localStorage，避免长期驻留）；
- *   - 回调地址默认 `${origin}/oauth/callback`，必须与 OAuth 客户端登记的 redirect_uris 逐字一致；
- *   - VITE_AUTH_MODE=mock 时返回演示会话（平台管理员），不发任何网络请求。
+ * **实现已统一**：流程在 `@autional/shared/console-auth` 的 `createConsoleAuth`，
+ * 本文件只负责「本站的策略与常量」：
+ *   - 令牌存 **sessionStorage**（关闭标签页即失效；不写 localStorage，避免长期驻留）；
+ *   - 演示会话 = 平台管理员；
+ *   - 存储 key 前缀。
  *
- * 安全要点：
- *   - code_verifier / state / nonce 只存本标签页（sessionStorage），用完即删；
- *   - state 不匹配直接判失败（防 CSRF / 授权码注入）；
- *   - id_token 的 nonce 与本地保存值不一致同样判失败（防重放）。
+ * 与密钥中心共用同一份引擎：任一处流程修复（瞬时故障保活、吊销、声明合并等）
+ * 两站同时生效，不会再出现「一边改了另一边没改」的漂移。
  */
-import { decodeJwtPayload as decodeJwtPayloadShared } from '@autional/shared/jwt';
-import { generatePKCE } from '@autional/shared/pkce';
 import {
-  expiresAtFromToken,
-  mergeTokenClaims,
-  pickClaimString,
-  sessionExpiryAt,
-  userFromClaims,
+  createConsoleAuth,
+  type ConsoleSession,
+  type ConsoleSessionUser,
 } from '@autional/shared/console-auth';
 import { APP_ID, AUTH_MODE, OIDC, TENANT_ID } from './config';
 
-export type SessionUser = {
-  /** JWT sub / OIDC subject */
-  sub: string;
-  /** 展示名（name / preferred_username / email 依次回落） */
-  name: string;
-  email: string;
-  /** 令牌内租户；空 = 需要 VITE_TENANT_ID 或由后端拒绝 */
-  tenantId: string;
-  /** 令牌内应用；空 = 平台应用 */
-  appId: string;
-  roles: string[];
-};
+export type SessionUser = ConsoleSessionUser;
+export type Session = ConsoleSession;
 
-export type Session = {
-  mode: 'mock' | 'oidc';
-  accessToken: string;
-  refreshToken?: string;
-  idToken?: string;
-  /** epoch ms；0 = 不过期（mock） */
-  expiresAt: number;
-  user: SessionUser;
-};
-
-type TokenResponse = {
-  access_token?: string;
-  refresh_token?: string;
-  id_token?: string;
-  expires_in?: number;
-  token_type?: string;
-  scope?: string;
-  error?: string;
-  error_description?: string;
-};
-
-type PkceState = {
-  verifier: string;
-  state: string;
-  nonce: string;
-  redirectUri: string;
-  at: number;
-};
-
+/** 存储 key（含 PKCE 上下文与 mock 退出标记）。 */
 const SESSION_KEY = 'config-console:auth:v1';
-const PKCE_KEY = 'config-console:pkce:v1';
-/** mock 模式下点过「退出」的标记（否则演示会话每次都自动存在）。 */
-const MOCK_SIGNED_OUT_KEY = 'config-console:auth:signed-out:v1';
 
-/** 提前 60s 视为过期，避免请求途中失效。 */
-const EXPIRY_SKEW_MS = 60_000;
-
-/** sessionStorage 在隐私模式/被禁用时会抛异常：一律降级为「无会话」，绝不抛到 UI。 */
-function readStorage(key: string): string | null {
-  try {
-    return window.sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: string): void {
-  try {
-    window.sessionStorage.setItem(key, value);
-  } catch {
-    /* 忽略：无存储时退化为「每次刷新都要重新登录」 */
-  }
-}
-
-function removeStorage(key: string): void {
-  try {
-    window.sessionStorage.removeItem(key);
-  } catch {
-    /* 忽略 */
-  }
-}
-
-function b64url(bytes: Uint8Array): string {
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function randomToken(byteLength = 32): string {
-  const buf = new Uint8Array(byteLength);
-  crypto.getRandomValues(buf);
-  return b64url(buf);
-}
-
-/**
- * 解出 JWT / id_token 的 payload（不验签：签名校验在后端，前端只取展示用声明）。
- * 统一走 `@autional/shared/jwt`：base64url 的 `-`/`_` 必须归一后再 atob，
- * 裸 atob 会抛 InvalidCharacterError 并被误判成「已过期」（shared PL-70 事故）。
- */
-function decodeJwtPayload(token?: string): Record<string, unknown> | null {
-  return token ? decodeJwtPayloadShared(token) : null;
-}
-
-function saveSession(session: Session): void {
-  writeStorage(SESSION_KEY, JSON.stringify(session));
-}
-
-/** 把用户资料合并进当前会话并落盘（用于 identity 补全展示名）。 */
-export function patchSessionUser(patch: Partial<SessionUser>): Session | null {
-  const current = currentSession();
-  if (!current) return null;
-  const next: Session = { ...current, user: { ...current.user, ...patch } };
-  saveSession(next);
-  return next;
-}
-
-function clearSession(): void {
-  removeStorage(SESSION_KEY);
-}
-
-function readPkce(): PkceState | null {
-  const raw = readStorage(PKCE_KEY);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as PkceState;
-    if (!parsed?.verifier || !parsed?.state) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-/** 演示会话：平台管理员（VITE_AUTH_MODE=mock 默认）。 */
-export function mockSession(): Session {
-  return {
+const auth = createConsoleAuth({
+  authMode: AUTH_MODE,
+  // 本站策略：令牌只存 sessionStorage（关标签页即失效）
+  storage: 'session',
+  keys: {
+    session: SESSION_KEY,
+    pkce: 'config-console:pkce:v1',
+    mockSignedOut: 'config-console:auth:signed-out:v1',
+  },
+  oidc: {
+    authorizeUrl: OIDC.authorizeUrl,
+    tokenUrl: OIDC.tokenUrl,
+    clientId: OIDC.clientId,
+    scope: OIDC.scope,
+    redirectUri: OIDC.redirectUri,
+  },
+  /** 演示会话：平台管理员（VITE_AUTH_MODE=mock 默认）。 */
+  mockSession: () => ({
     mode: 'mock',
     accessToken: '',
     expiresAt: 0,
@@ -162,241 +52,26 @@ export function mockSession(): Session {
       appId: APP_ID,
       roles: ['super_admin'],
     },
-  };
-}
+  }),
+});
 
+export const mockSession = auth.mockSession;
 /** 当前会话（同步读）；过期返回 null。 */
-export function currentSession(): Session | null {
-  if (AUTH_MODE === 'mock') {
-    return readStorage(MOCK_SIGNED_OUT_KEY) === '1' ? null : mockSession();
-  }
-  const raw = readStorage(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    const session = JSON.parse(raw) as Session;
-    if (!session?.accessToken) return null;
-    // 以 JWT exp 为准（服务端真实 TTL）；只信存储里的 expiresAt 会漏判「实际已过期」。
-    // 密钥中心早就这么做了，配置中心此前只信记录值——同一决策两套实现，必然漂移。
-    const expiry = sessionExpiryAt(session.accessToken, session.expiresAt);
-    if (expiry > 0 && Date.now() > expiry - EXPIRY_SKEW_MS) return null;
-    return session;
-  } catch {
-    return null;
-  }
-}
-
+export const currentSession = auth.currentSession;
 /** 启动时恢复会话：过期但有 refresh_token 时静默续期。 */
-export async function restoreSession(): Promise<Session | null> {
-  if (AUTH_MODE === 'mock') return currentSession();
-  const raw = readStorage(SESSION_KEY);
-  if (!raw) return null;
-  let stored: Session;
-  try {
-    stored = JSON.parse(raw) as Session;
-  } catch {
-    clearSession();
-    return null;
-  }
-  const storedExpiry = stored?.accessToken ? sessionExpiryAt(stored.accessToken, stored.expiresAt) : 0;
-  if (stored?.accessToken && (storedExpiry === 0 || Date.now() <= storedExpiry - EXPIRY_SKEW_MS)) {
-    return stored;
-  }
-  const refreshed = await refreshSession(stored);
-  return refreshed;
-}
-
-/**
- * 发起登录。
- *  - mock：直接返回演示会话（不跳转）；
- *  - oidc：生成 PKCE 上下文并跳转授权端点，返回 null（页面即将离开）。
- */
-export async function startLogin(): Promise<Session | null> {
-  if (AUTH_MODE === 'mock') {
-    removeStorage(MOCK_SIGNED_OUT_KEY);
-    const session = mockSession();
-    saveSession(session);
-    return session;
-  }
-  if (!OIDC.clientId) {
-    throw new Error('缺少 VITE_OIDC_CLIENT_ID：请先在 OAuth 客户端登记回调地址并配置客户端 ID');
-  }
-
-  // PKCE 由 shared 统一生成（RFC 7636：verifier 43–128 字符，challenge = base64url(sha256(verifier))）
-  const { verifier, challenge } = await generatePKCE();
-  const state = randomToken(16);
-  const nonce = randomToken(16);
-  const redirectUri = OIDC.redirectUri;
-
-  writeStorage(PKCE_KEY, JSON.stringify({ verifier, state, nonce, redirectUri, at: Date.now() } satisfies PkceState));
-
-  const url = new URL(OIDC.authorizeUrl);
-  url.searchParams.set('response_type', 'code');
-  url.searchParams.set('client_id', OIDC.clientId);
-  url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set('scope', OIDC.scope);
-  url.searchParams.set('state', state);
-  url.searchParams.set('nonce', nonce);
-  url.searchParams.set('code_challenge', challenge);
-  url.searchParams.set('code_challenge_method', 'S256');
-
-  window.location.assign(url.toString());
-  return null;
-}
-
-/** 令牌端点错误：4xx = 确定失败（invalid_grant 等）；网络/5xx = 瞬时，不该登出。 */
-class TokenRequestError extends Error {
-  constructor(
-    message: string,
-    readonly fatal: boolean,
-  ) {
-    super(message);
-    this.name = 'TokenRequestError';
-  }
-}
-
-async function postToken(body: URLSearchParams): Promise<TokenResponse> {
-  let res: Response;
-  try {
-    res = await fetch(OIDC.tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: body.toString(),
-    });
-  } catch (cause) {
-    throw new TokenRequestError(`无法连接令牌端点（${OIDC.tokenUrl}）：${(cause as Error).message}`, false);
-  }
-  const data = (await res.json().catch(() => null)) as TokenResponse | null;
-  if (!res.ok || !data?.access_token) {
-    const reason = data?.error_description || data?.error || `HTTP ${res.status}`;
-    throw new TokenRequestError(`换取令牌失败：${reason}`, res.status >= 400 && res.status < 500);
-  }
-  return data;
-}
-
+export const restoreSession = auth.restoreSession;
+/** 发起登录：mock 直接给演示会话；oidc 生成 PKCE 并跳转授权端点。 */
+export const startLogin = auth.startLogin;
 /** 处理 `/oauth/callback?code=...&state=...`：校验 state、换票、校验 nonce、落会话。 */
-export async function completeLogin(search: string = window.location.search): Promise<Session> {
-  const query = new URLSearchParams(search);
-  const error = query.get('error');
-  if (error) {
-    const desc = query.get('error_description');
-    throw new Error(`授权被拒绝：${error}${desc ? ` · ${desc}` : ''}`);
-  }
-  const code = query.get('code');
-  const state = query.get('state');
-  if (!code) throw new Error('回调缺少 code 参数');
-
-  const pkce = readPkce();
-  if (!pkce) throw new Error('登录会话已失效（缺少 PKCE 上下文），请重新登录');
-  if (!state || state !== pkce.state) throw new Error('state 校验失败（可能的 CSRF），请重新登录');
-  if (Date.now() - pkce.at > 10 * 60_000) {
-    removeStorage(PKCE_KEY);
-    throw new Error('登录超时，请重新登录');
-  }
-  if (!OIDC.clientId) throw new Error('缺少 VITE_OIDC_CLIENT_ID');
-
-  const data = await postToken(
-    new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: pkce.redirectUri,
-      client_id: OIDC.clientId,
-      code_verifier: pkce.verifier,
-    }),
-  );
-
-  const claims = mergeTokenClaims(data.access_token, data.id_token);
-  const nonceClaim = pickClaimString(claims, 'nonce');
-  if (nonceClaim && nonceClaim !== pkce.nonce) {
-    removeStorage(PKCE_KEY);
-    throw new Error('nonce 校验失败（令牌可能被重放），请重新登录');
-  }
-
-  removeStorage(PKCE_KEY);
-
-  const session: Session = {
-    mode: 'oidc',
-    accessToken: data.access_token as string,
-    refreshToken: data.refresh_token,
-    idToken: data.id_token,
-    expiresAt: expiresAtFromToken(data.access_token as string, data.expires_in),
-    user: userFromClaims(claims, '已登录用户'),
-  };
-  saveSession(session);
-  return session;
-}
-
-/** 用 refresh_token 续期；失败返回 null 并清理会话。 */
-let refreshInFlight: Promise<Session | null> | null = null;
-
+export const completeLogin = auth.completeLogin;
 /** 用 refresh_token 续期；单飞（并发 401 / 定时刷新只发一次）。 */
-export function refreshSession(stored?: Session | null): Promise<Session | null> {
-  if (AUTH_MODE === 'mock') return Promise.resolve(currentSession());
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = doRefreshSession(stored).finally(() => {
-    refreshInFlight = null;
-  });
-  return refreshInFlight;
-}
-
-async function doRefreshSession(stored?: Session | null): Promise<Session | null> {
-  let base = stored ?? null;
-  if (!base) {
-    const raw = readStorage(SESSION_KEY);
-    if (!raw) return null;
-    try {
-      base = JSON.parse(raw) as Session;
-    } catch {
-      clearSession();
-      return null;
-    }
-  }
-  if (!base?.refreshToken || !OIDC.clientId) {
-    clearSession();
-    return null;
-  }
-  try {
-    const data = await postToken(
-      new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: base.refreshToken,
-        client_id: OIDC.clientId,
-      }),
-    );
-    const claims = mergeTokenClaims(data.access_token, data.id_token);
-    const session: Session = {
-      mode: 'oidc',
-      accessToken: data.access_token as string,
-      refreshToken: data.refresh_token ?? base.refreshToken,
-      idToken: data.id_token ?? base.idToken,
-      expiresAt: expiresAtFromToken(data.access_token as string, data.expires_in),
-      user: userFromClaims(claims, base.user?.name || '已登录用户'),
-    };
-    // identity 补全过的展示名（platform_admin）不要被 token 里的 sub 尾段覆盖，
-    // 否则每 5 分钟续期一次，顶栏就闪回「…XXXXXX」并重复查一次资料。
-    if (session.user.name.startsWith('…') && base.user?.name && !base.user.name.startsWith('…')) {
-      session.user = { ...session.user, name: base.user.name, email: session.user.email || base.user.email };
-    }
-    // 令牌内没有租户/应用声明时，保留上一轮已知值，避免 X-Tenant-ID 丢失。
-    if (!session.user.tenantId) session.user.tenantId = base.user?.tenantId ?? '';
-    if (!session.user.appId) session.user.appId = base.user?.appId ?? '';
-    saveSession(session);
-    return session;
-  } catch (err) {
-    // 网络/网关瞬时故障：保留会话，下一次定时器或请求再续；只有 4xx 才清会话。
-    if (err instanceof TokenRequestError && !err.fatal) return currentSession();
-    clearSession();
-    return null;
-  }
-}
-
-/** 退出登录：清空本地会话（不跳转，由调用方决定下一步）。 */
-export async function signOut(): Promise<void> {
-  clearSession();
-  removeStorage(PKCE_KEY);
-  if (AUTH_MODE === 'mock') writeStorage(MOCK_SIGNED_OUT_KEY, '1');
-}
-
+export const refreshSession = auth.refreshSession;
+/** 退出登录：吊销令牌（服务端）+ 清本地会话。 */
+export const signOut = auth.signOut;
 /** 供 api 层调用：401 时尝试静默续期，成功则返回新会话。 */
-export async function renewAfterUnauthorized(): Promise<Session | null> {
-  return refreshSession();
+export const renewAfterUnauthorized = auth.renewAfterUnauthorized;
+
+/** 把用户资料合并进当前会话并落盘（用于 identity 补全展示名）。 */
+export function patchSessionUser(patch: Partial<SessionUser>): Session | null {
+  return auth.patchUser(patch);
 }
