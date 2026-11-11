@@ -30,6 +30,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Portal literals（门户清单单一真源）
+        run: pnpm --filter @autional/config-console exec autional-check-portal-literals --root .
+
       - name: Editors i18n coverage
         run: pnpm --filter @autional/config-console check:editors-i18n
 
