@@ -14,6 +14,7 @@
     "gen:editors": "node --experimental-strip-types scripts/gen-editors-seed.ts",
     "check:editors-i18n": "node --experimental-strip-types scripts/check-editors-i18n.ts",
     "test:e2e": "playwright test",
+    "test:e2e:auth": "playwright test -c playwright.auth.config.ts",
     "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
