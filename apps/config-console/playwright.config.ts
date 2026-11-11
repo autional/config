@@ -9,7 +9,8 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   // 认证流程 e2e 需要假 OIDC 提供方，走独立配置 playwright.auth.config.ts
-  testIgnore: /auth-oidc\.spec\.ts/,
+  // auth-oidc 需假 OIDC 提供方；prod-cn-smoke 打的是**线上**（不应在 CI 里跑）——各走独立配置
+  testIgnore: /(auth-oidc|prod-cn-smoke)\.spec\.ts/,
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,
