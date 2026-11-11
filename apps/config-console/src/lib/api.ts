@@ -9,6 +9,7 @@
  *
  * 租户/应用一律取自登录令牌（后端会以 JWT 为准做一致性校验），`VITE_TENANT_ID` / `VITE_APP_ID` 只做兜底。
  */
+import { createFetchClient, FetchApiError } from '@autional/shared';
 import { refreshSession, currentSession } from './auth';
 import { API_BASE, APP_ID, AUDIT_BASE, AUTH_MODE, TENANT_ID } from './config';
 
@@ -55,44 +56,69 @@ function scopeHeaders(): Record<string, string> {
   return headers;
 }
 
-function buildUrl(base: string, path: string, query?: Record<string, QueryValue>): string {
-  const url = new URL(`${base}${path}`, window.location.origin);
-  if (query) {
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === null || value === '') continue;
-      url.searchParams.set(key, String(value));
-    }
-  }
-  return url.toString();
-}
-
-async function parseProblem(res: Response): Promise<ProblemBody> {
-  try {
-    return (await res.json()) as ProblemBody;
-  } catch {
-    return null;
-  }
-}
-
-function problemMessage(res: Response, problem: ProblemBody): string {
+function problemMessage(status: number, problem: ProblemBody): string {
   const detail = problem?.detail || problem?.message || problem?.title;
-  if (detail) return `${detail}（HTTP ${res.status}${problem?.code ? ` · ${problem.code}` : ''}）`;
-  if (res.status === 401) return '未登录或登录已过期（HTTP 401）';
-  if (res.status === 403) return '无权限：需要 config:read / config:write / config:publish（HTTP 403）';
-  if (res.status === 503) return '服务暂不可用（审计/鉴权装配缺失，写面 fail-closed；HTTP 503）';
-  return `请求失败（HTTP ${res.status}）`;
+  if (detail) return `${detail}（HTTP ${status}${problem?.code ? ` · ${problem.code}` : ''}）`;
+  if (status === 401) return '未登录或登录已过期（HTTP 401）';
+  if (status === 403) return '无权限：需要 config:read / config:write / config:publish（HTTP 403）';
+  if (status === 503) return '服务暂不可用（审计/鉴权装配缺失，写面 fail-closed；HTTP 503）';
+  return `请求失败（HTTP ${status}）`;
+}
+
+/**
+ * 传输层 = `@autional/shared` 的 `createFetchClient`（与各门户同一套实现）：作用域头、超时、
+ * RFC7807 归一、401 一次静默续期；本站只保留自己的错误类型与文案。
+ *
+ * 保留本站语义：`X-Tenant-ID` / `X-App-ID` 由 `getHeaders` 注入（含未登录时的构建期兜底值，
+ * 与迁移前一致）；401 放弃时派发 `UNAUTHORIZED_EVENT` 交 App 切登录态。
+ */
+function buildClient(baseUrl: string) {
+  return createFetchClient({
+    baseUrl,
+    getToken: () => currentSession()?.accessToken ?? null,
+    getHeaders: () => scopeHeaders(),
+    onUnauthorized: () => {
+      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+    },
+    refresh:
+      AUTH_MODE === 'oidc'
+        ? async () => {
+            const renewed = await refreshSession();
+            return renewed?.accessToken ?? null;
+          }
+        : undefined,
+    timeoutMs: 20_000,
+  });
+}
+
+const apiClient = buildClient(API_BASE);
+const auditClient = buildClient(AUDIT_BASE);
+
+/** FetchApiError → 本站 ApiError（保留既有文案与业务码）。 */
+function toApiError(error: unknown): ApiError {
+  if (!(error instanceof FetchApiError)) {
+    return new ApiError(0, (error as Error)?.message || '请求失败');
+  }
+  if (error.code === 'timeout') return new ApiError(0, error.message);
+  if (error.code === 'aborted') return new ApiError(0, '请求已取消');
+  if (error.code === 'network_error') return new ApiError(0, `无法连接配置中心：${error.detail || error.message}`);
+  const problem = (error.body && typeof error.body === 'object' ? error.body : null) as ProblemBody;
+  return new ApiError(
+    error.status,
+    problemMessage(error.status, problem),
+    problem?.code ?? (error.status === 401 ? 'unauthorized' : ''),
+    problem?.detail ?? '',
+  );
 }
 
 /** 统一请求入口：带作用域头、可被 401 触发一次静默续期、错误归一为 ApiError。 */
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const res = await send(API_BASE, path, options, 'application/json');
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  if (!text) return undefined as T;
+  const { method = 'GET', query, body, timeoutMs } = options;
   try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new ApiError(res.status, '响应不是合法 JSON');
+    const data = await apiClient.request<T | null>(path, { method, query, body, timeoutMs });
+    return (data ?? undefined) as T;
+  } catch (error) {
+    throw toApiError(error);
   }
 }
 
@@ -101,19 +127,30 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
  * 401 重试/错误归一口径与 request 完全一致。
  */
 export async function requestText(path: string, options: RequestOptions = {}): Promise<string> {
-  const res = await send(API_BASE, path, { timeoutMs: 60_000, ...options }, '*/*');
-  return res.text();
+  const { method = 'GET', query, body, timeoutMs } = options;
+  try {
+    const text = await apiClient.request<string>(path, {
+      method,
+      query,
+      body,
+      timeoutMs: timeoutMs ?? 60_000,
+      responseType: 'text',
+      headers: { Accept: '*/*' },
+    });
+    return text ?? '';
+  } catch (error) {
+    throw toApiError(error);
+  }
 }
 
 /** 审计查询（独立 base；与 config 管理面相同的鉴权/401/错误归一）。 */
 export async function requestAudit<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const res = await send(AUDIT_BASE, path, options, 'application/json');
-  const text = await res.text();
-  if (!text) return undefined as T;
+  const { method = 'GET', query, body, timeoutMs } = options;
   try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new ApiError(res.status, '审计响应不是合法 JSON');
+    const data = await auditClient.request<T | null>(path, { method, query, body, timeoutMs });
+    return (data ?? undefined) as T;
+  } catch (error) {
+    throw toApiError(error);
   }
 }
 
@@ -160,46 +197,6 @@ export async function listAuditLogs(input: {
  * 发请求并归一错误（401 可静默续期一次）。`request` / `requestText` 共用本函数，
  * 保证鉴权、超时、错误文案只有一套实现。
  */
-async function send(base: string, path: string, options: RequestOptions, accept: string): Promise<Response> {
-  const { method = 'GET', query, body, retried = false, timeoutMs = 20_000 } = options;
-  const headers: Record<string, string> = { Accept: accept, ...scopeHeaders() };
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
-
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-  let res: Response;
-  try {
-    res = await fetch(buildUrl(base, path, query), {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-      signal: controller.signal,
-      credentials: 'omit',
-    });
-  } catch (cause) {
-    const aborted = (cause as Error)?.name === 'AbortError';
-    throw new ApiError(0, aborted ? `请求超时（${timeoutMs / 1000}s）` : `无法连接配置中心：${(cause as Error).message}`);
-  } finally {
-    window.clearTimeout(timer);
-  }
-
-  if (res.status === 401) {
-    if (!retried && AUTH_MODE === 'oidc') {
-      const renewed = await refreshSession();
-      if (renewed) return send(base, path, { ...options, retried: true }, accept);
-    }
-    const problem = await parseProblem(res);
-    window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
-    throw new ApiError(401, problemMessage(res, problem), problem?.code ?? 'unauthorized', problem?.detail ?? '');
-  }
-
-  if (!res.ok) {
-    const problem = await parseProblem(res);
-    throw new ApiError(res.status, problemMessage(res, problem), problem?.code ?? '', problem?.detail ?? '');
-  }
-  return res;
-}
-
 /* ------------------------------- 响应形状 ------------------------------- */
 
 /** 管理面条目 = config_items 行 + taxonomy 推导的 domain/group（service_admin_read.go AdminItem）。 */
