@@ -14,7 +14,13 @@
  */
 import { decodeJwtPayload as decodeJwtPayloadShared } from '@autional/shared/jwt';
 import { generatePKCE } from '@autional/shared/pkce';
-import { expiresAtFromToken, pickClaimString, userFromClaims } from '@autional/shared/console-auth';
+import {
+  expiresAtFromToken,
+  mergeTokenClaims,
+  pickClaimString,
+  sessionExpiryAt,
+  userFromClaims,
+} from '@autional/shared/console-auth';
 import { APP_ID, AUTH_MODE, OIDC, TENANT_ID } from './config';
 
 export type SessionUser = {
@@ -169,7 +175,10 @@ export function currentSession(): Session | null {
   try {
     const session = JSON.parse(raw) as Session;
     if (!session?.accessToken) return null;
-    if (session.expiresAt > 0 && Date.now() > session.expiresAt - EXPIRY_SKEW_MS) return null;
+    // 以 JWT exp 为准（服务端真实 TTL）；只信存储里的 expiresAt 会漏判「实际已过期」。
+    // 密钥中心早就这么做了，配置中心此前只信记录值——同一决策两套实现，必然漂移。
+    const expiry = sessionExpiryAt(session.accessToken, session.expiresAt);
+    if (expiry > 0 && Date.now() > expiry - EXPIRY_SKEW_MS) return null;
     return session;
   } catch {
     return null;
@@ -188,7 +197,8 @@ export async function restoreSession(): Promise<Session | null> {
     clearSession();
     return null;
   }
-  if (stored?.accessToken && (stored.expiresAt === 0 || Date.now() <= stored.expiresAt - EXPIRY_SKEW_MS)) {
+  const storedExpiry = stored?.accessToken ? sessionExpiryAt(stored.accessToken, stored.expiresAt) : 0;
+  if (stored?.accessToken && (storedExpiry === 0 || Date.now() <= storedExpiry - EXPIRY_SKEW_MS)) {
     return stored;
   }
   const refreshed = await refreshSession(stored);
@@ -294,7 +304,7 @@ export async function completeLogin(search: string = window.location.search): Pr
     }),
   );
 
-  const claims = decodeJwtPayload(data.id_token) ?? decodeJwtPayload(data.access_token);
+  const claims = mergeTokenClaims(data.access_token, data.id_token);
   const nonceClaim = pickClaimString(claims, 'nonce');
   if (nonceClaim && nonceClaim !== pkce.nonce) {
     removeStorage(PKCE_KEY);
@@ -352,7 +362,7 @@ async function doRefreshSession(stored?: Session | null): Promise<Session | null
         client_id: OIDC.clientId,
       }),
     );
-    const claims = decodeJwtPayload(data.id_token) ?? decodeJwtPayload(data.access_token);
+    const claims = mergeTokenClaims(data.access_token, data.id_token);
     const session: Session = {
       mode: 'oidc',
       accessToken: data.access_token as string,
