@@ -13,6 +13,47 @@ if (!rawOrigin) {
 
 const ORIGIN = rawOrigin.replace(/\/+$/, '');
 
+/**
+ * 安全响应头（与密钥中心/其它门户同一套最小集）。
+ *
+ * 此前本站**一个都没有**（实测 config.autional.com 无 nosniff / frame-options /
+ * referrer-policy / permissions-policy），而 secret 早已有 —— 同一类站点两套待遇，
+ * 属于会随时间放大的不一致。CSP 允许 antd 的内联样式；API 走同源 /bff。
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://api.autional.com https://api.autional.cn",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+  'upgrade-insecure-requests',
+].join('; ');
+
+const SECURITY_HEADERS = [
+  { key: 'Content-Security-Policy', value: CSP },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+];
+
+const IMMUTABLE = 'public, max-age=31536000, immutable';
+const NO_CACHE = 'public, max-age=0, must-revalidate';
+const HTML_CACHE_HEADERS = [
+  { key: 'Cache-Control', value: NO_CACHE },
+  // 防止 Vercel Edge 长时间缓存旧 index.html（旧 HTML 引用已删除的旧 bundle → 404/白屏）。
+  { key: 'CDN-Cache-Control', value: 'no-store' },
+  { key: 'Vercel-CDN-Cache-Control', value: 'no-store' },
+];
+
 const spaFallback: Rewrite = {
   source: '/(.*)',
   destination: '/index.html',
@@ -24,6 +65,17 @@ export const config: VercelConfig = {
   installCommand: 'pnpm install --frozen-lockfile',
   buildCommand: 'pnpm --filter @autional/config-console build',
   outputDirectory: 'apps/config-console/dist',
+  headers: [
+    routes.header('/(.*)', SECURITY_HEADERS),
+    routes.header('/assets/(.*)', [{ key: 'Cache-Control', value: IMMUTABLE }]),
+    routes.header('/', HTML_CACHE_HEADERS),
+    routes.header('/index.html', HTML_CACHE_HEADERS),
+    routes.header('/domains/(.*)', HTML_CACHE_HEADERS),
+    routes.header('/changes', HTML_CACHE_HEADERS),
+    routes.header('/changesets', HTML_CACHE_HEADERS),
+    routes.header('/audit', HTML_CACHE_HEADERS),
+    routes.header('/oauth/callback', HTML_CACHE_HEADERS),
+  ],
   rewrites: [
     routes.rewrite('/bff/:path*', `${ORIGIN}/bff/:path*`),
     routes.rewrite('/oauth/callback', '/index.html'),
