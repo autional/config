@@ -39,6 +39,11 @@ jobs:
       - name: Typecheck + build
         run: pnpm build
 
+      # 无障碍闸门（AC C-28 / ui-denominator G5·G6）：jsx-a11y recommended，0 error/warn 才算过。
+      # 单列一步的原因同 admin-console 试点：存量 lint 噪音大，a11y 需要独立亮红/亮绿。
+      - name: A11y lint
+        run: pnpm --filter @autional/config-console run lint:a11y
+
   e2e:
     runs-on: ubuntu-latest
     steps:

@@ -33,11 +33,12 @@ export function ReasonModal(props: {
       destroyOnHidden
     >
       {props.description}
+      {/* 不用 autoFocus：jsx-a11y/no-autofocus 会拦（抢焦点、键盘用户失去上下文）；
+          Modal 打开时本身会把焦点移进对话框。 */}
       <Input.TextArea
         rows={3}
         maxLength={200}
         showCount
-        autoFocus
         value={reason}
         onChange={(event) => setReason(event.target.value)}
         placeholder={t('reason.placeholder')}
