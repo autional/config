@@ -11,13 +11,17 @@ import { expect, test } from '@playwright/test';
  * 不登录：只用公开可访问的登录页/首页，避免需要账号。
  */
 
+// 默认打 .cn；用 PROD_SUFFIX=com 可核对 .com（两边站点同名）。
+const SUFFIX = process.env.PROD_SUFFIX === 'com' ? 'com' : 'cn';
+const host = (name: string) => `${name}.autional.${SUFFIX}`;
+
 const SITES = [
-	{ host: 'config.autional.cn', expectOidcLabel: true },
-	{ host: 'secret.autional.cn', expectOidcLabel: true },
-	{ host: 'admin.autional.cn', expectOidcLabel: false },
-	{ host: 'platform.autional.cn', expectOidcLabel: false },
-	{ host: 'security.autional.cn', expectOidcLabel: false },
-	{ host: 'user.autional.cn', expectOidcLabel: false },
+	{ host: host('config'), expectOidcLabel: true },
+	{ host: host('secret'), expectOidcLabel: true },
+	{ host: host('admin'), expectOidcLabel: false },
+	{ host: host('platform'), expectOidcLabel: false },
+	{ host: host('security'), expectOidcLabel: false },
+	{ host: host('user'), expectOidcLabel: false },
 ];
 
 for (const site of SITES) {
