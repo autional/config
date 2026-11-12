@@ -1,0 +1,60 @@
+name: Security headers
+
+# 两区（.cn / .com）安全响应头的回归守卫。
+#
+# 为什么单独一个 workflow：这是**跨站点**的外部探测（打线上 HTTP），
+# 不依赖任何仓内代码，也不需要密钥；放站点仓是因为本仓在 GitHub 上能跑 Action。
+#
+# 判定：6 站 × 2 区 = 12 组，每组必须有
+#   X-Content-Type-Options / X-Frame-Options / Referrer-Policy / Permissions-Policy / Content-Security-Policy
+# 任一组缺失 → 退出码 1（红）。
+
+on:
+  schedule:
+    - cron: '17 3 * * *' # 每天 UTC 03:17（北京时间 11:17）
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/security-headers.yml'
+
+concurrency:
+  group: security-headers
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check 12 groups (6 sites × cn/com)
+        run: |
+          node --input-type=module -e '
+          const SITES = ["config","secret","admin","platform","security","user"];
+          const WANT = ["x-content-type-options","x-frame-options","referrer-policy","permissions-policy","content-security-policy"];
+          const rows = []; let bad = 0;
+          for (const region of ["cn","com"]) {
+            for (const site of SITES) {
+              const url = `https://${site}.autional.${region}`;
+              try {
+                const res = await fetch(url, { redirect: "follow" });
+                const h = Object.fromEntries([...res.headers].map(([k,v]) => [k.toLowerCase(), v]));
+                const missing = WANT.filter((k) => !h[k]);
+                const ok = res.status < 400 && missing.length === 0;
+                if (!ok) bad++;
+                rows.push(`${ok ? "PASS" : "FAIL"} ${region} ${site} status=${res.status}${missing.length ? " missing=" + missing.join(",") : ""}`);
+              } catch (e) {
+                bad++;
+                rows.push(`FAIL ${region} ${site} ${e.message}`);
+              }
+            }
+          }
+          console.log(rows.join("\n"));
+          console.log(`\n${bad === 0 ? "PASS" : "FAIL"}：${rows.length - bad}/${rows.length} 组满足`);
+          process.exit(bad === 0 ? 0 : 1);
+          '
