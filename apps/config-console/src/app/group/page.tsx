@@ -106,6 +106,18 @@ export default function GroupEditorPage() {
             {editor.fields.map((field) => {
               const hit = resolveField(field.keys);
               const secretKeys = (field.secret ?? []).join(' / ');
+              /**
+               * 「去密钥中心」深链只带**密钥名**，不带任何值：
+               *   - 编辑器 schema 声明的 `field.secret` 就是密钥名（如 EMAIL_PASSWORD）—— 直接用它，
+               *     不依赖配置项是否存在、也不受脱敏影响（此前依赖 `hit.v` 且要求未脱敏，
+               *     而密钥字段的值恒为脱敏/不存在 ⇒ 深链实际从不渲染）；
+               *   - 未声明 `secret` 时才退回配置项里的引用键名（且仍需未脱敏）。
+               */
+              const secretNames = field.secret?.length
+                ? field.secret
+                : hit?.v && !isMasked({ value: hit.v, masked: hit.masked })
+                  ? [hit.v]
+                  : [];
               return (
                 <div key={field.label} className="grid grid-cols-1 gap-2 py-3 sm:grid-cols-[220px_1fr_auto] sm:items-center">
                   <div>
@@ -116,17 +128,21 @@ export default function GroupEditorPage() {
                     {secretKeys ? (
                       <div className="space-y-1">
                         <div className="text-xs text-[var(--color-text-secondary)]">{t('group.secretConfigKeys')}</div>
-                        <code className="text-xs">{secretKeys}</code>
-                        {hit?.v && !isMasked({ value: hit.v, masked: hit.masked }) ? (
-                          <a
-                            href={secretCenterUrl(hit.v)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block break-all text-xs text-[var(--color-primary)] hover:underline"
-                          >
-                            {t('group.openSecret', { key: hit.v })} ↗
-                          </a>
-                        ) : null}
+                        {secretNames.length ? (
+                          secretNames.map((name) => (
+                            <a
+                              key={name}
+                              href={secretCenterUrl(name)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block break-all text-xs text-[var(--color-primary)] hover:underline"
+                            >
+                              {t('group.openSecret', { key: name })} ↗
+                            </a>
+                          ))
+                        ) : (
+                          <code className="text-xs">{secretKeys}</code>
+                        )}
                         <div className="text-xs text-[var(--color-text-secondary)]">{t('group.secretRefHint')}</div>
                       </div>
                     ) : (
