@@ -75,6 +75,7 @@ export const config: VercelConfig = {
     routes.header('/changesets', HTML_CACHE_HEADERS),
     routes.header('/audit', HTML_CACHE_HEADERS),
     routes.header('/oauth/callback', HTML_CACHE_HEADERS),
+    routes.header('/env.js', HTML_CACHE_HEADERS),
   ],
   rewrites: [
     routes.rewrite('/bff/:path*', `${ORIGIN}/bff/:path*`),
